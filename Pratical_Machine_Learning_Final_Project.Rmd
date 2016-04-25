@@ -1,0 +1,234 @@
+---
+title: Pratical Machine Learning Final Project - Prediction Assignment Writeup
+author: "Zhenkun Guo"
+date: "April 24, 2016"
+output: html_document
+---
+## 1. Project Introduction
+
+### 1.1. Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website [here](http://groupware.les.inf.puc-rio.br/har). (see the section on the Weight Lifting Exercise Dataset).
+
+### 1.2. Data
+
+The training data for this project are available here: 
+[https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)
+
+The test data are available here: 
+[https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+The data for this project come from this source:
+[http://groupware.les.inf.puc-rio.br/har](http://groupware.les.inf.puc-rio.br/har). If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+### 1.3. Goal
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+## 2. Preparation
+
+### 2.1. Load Necessary Packages
+
+Load the necessary packages ggplot2 and caret for machine learning.
+
+```{r, results='hide'}
+library(ggplot2)
+library(caret)
+```
+
+### 2.2. Download and Load the Data
+
+Download the data if they do not exist and then load in.
+
+```{r,cache=TRUE}
+trainUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+if (!file.exists("training.csv"))
+        download.file(trainUrl, "training.csv", method="auto")
+if (!file.exists("testing.csv"))
+        download.file(testUrl, "testing.csv", method="auto")
+training<-read.csv("training.csv")
+testing<-read.csv("testing.csv")
+dim(training)
+dim(testing)
+```
+
+### 2.3 Set Ramdon Seed
+
+```{r}
+set.seed(9527)
+```
+
+## 3. Data Cleaning
+
+### 3.1. Exclude Columns with No Variance
+
+Some measured variables has no variability, these variables will not help in the machine learning.
+
+```{r,cache=TRUE}
+trainingNZV <- nearZeroVar(training, saveMetrics=TRUE)
+training<-training[,!trainingNZV$nzv]
+dim(training)
+```
+
+100 Variables left.
+
+### 3.2. Exclude Columns with Too Many NAs
+
+Some columns include too many NAs, these columns will not help in the machine learning. So we need to exclude these variables. We set a thredhold, if portion of NA larger than 0.8, the variable will be excluded.
+
+```{r,cache=TRUE}
+nanum<-apply(is.na(training),2,sum)
+training<-training[,!(nanum/dim(training)>0.8)]
+dim(training)
+```
+
+59 variables left.
+
+### 3.3. Exclude the ID of the Observations
+
+ID of the observations are not relevant to the question. Also, we will make sure the classe varibale, which is our goal is a factor variable.
+
+```{r}
+training<-training[,-1]
+training$classe<-as.factor(training$classe)
+dim(training)
+```
+
+58 Varibales left.
+
+### 3.4. Only Leave the Same Set in Testing
+
+To applied the obtained prediction method, we need to make sure the testing set has the same series of varibles as the training set.
+
+```{r,cache=TRUE,warning=FALSE,message=FALSE}
+colindex<-NULL
+for (i in 1:length(colnames(training))){
+        temp<-grep(colnames(training)[i],colnames(testing))
+        if(length(temp)>0)
+                colindex[i]<-temp
+}
+testing<-testing[,colindex]
+dim(testing)
+```
+
+The testing set has 57 variables, it does not have "classe".
+
+### 3.5. Divide Training Set to Training and Testing Sets
+
+Because we need to evaluate the quality of learning algorithms, we need testing set and here we divide the large training set to two parts.
+
+```{r,cache=TRUE,warning=FALSE,message=FALSE}
+inTrain<-createDataPartition(training$classe, p = 0.65, list = FALSE)
+Mytraining<-training[inTrain,]
+Mytesting<-training[-inTrain,]
+dim(Mytraining)
+dim(Mytesting)
+```
+
+As we can see, the training set has 12757 observations and the testing set has 6865 observations.
+
+## 4. Apply Machine Learning Algorithm
+
+### 4.1. Linear Discriminant Analysis
+
+#### 4.1.1. Apply the Algorithm
+
+```{r, results='hide',cache=TRUE,warning=FALSE,message=FALSE}
+mod_lda<-train(classe ~ . , method = "lda" , data = Mytraining)
+pred_lda<-predict(mod_lda, newdata = Mytesting)
+con_lda<-confusionMatrix(pred_lda, Mytesting$classe)
+```
+
+#### 4.1.2. Evaluate the Method
+
+```{r}
+con_lda
+plot(con_lda$table,col = "white", main = paste("Linear Discriminant Analysis Confusion Matrix: Accuracy =", round(con_lda$overall['Accuracy'], 4)))
+```
+
+The accuracy is 85.97%, which is relatively low and we can see numbers of incorrect classification in all five classes.
+
+### 4.2. Random Forest Algorithm
+
+#### 4.2.1. Apply the Algorithm
+
+```{r, results='hide',cache=TRUE,warning=FALSE,message=FALSE}
+mod_rf<-train(classe ~ . , method = "rf" , data = Mytraining)
+pred_rf<-predict(mod_rf, newdata = Mytesting)
+con_rf<-confusionMatrix(pred_rf, Mytesting$classe)
+```
+
+#### 4.2.2. Evaluate the Method
+
+```{r}
+con_rf
+plot(mod_rf$finalModel, main = "Random Forest Model")
+plot(con_rf$table,col = "white", main = paste("Random Forest Confusion Matrix: Accuracy =", round(con_rf$overall['Accuracy'], 4)))
+```
+
+We can see as the number of tree increases, the error goes down dramatically. And the accuracy is relatively high: 99.83%
+
+### 4.3. Boosting Algorithm
+
+#### 4.3.1. Apply the Algorithm
+
+```{r, results='hide',cache=TRUE,warning=FALSE,message=FALSE}
+mod_gbm<-train(classe ~ . , method = "gbm" , data = Mytraining)
+pred_gbm<-predict(mod_gbm, newdata = Mytesting)
+con_gbm<-confusionMatrix(pred_gbm, Mytesting$classe)
+```
+
+#### 4.3.2. Evaluate the Method
+
+```{r}
+con_gbm
+plot(mod_gbm, main = "Boosting Model")
+plot(con_gbm$table,col = "white", main = paste("Boosting Confusion Matrix: Accuracy =", round(con_gbm$overall['Accuracy'], 4)))
+```
+
+We can see as the number of iterations increases, the Accuracy goes up rapidly. And the accuracy is relatively high: 99.61%
+
+### 4.4. Combine Different Models
+
+As have see here, the random forest and boosting methods did a great job. However, We'd like to see if we can have even better results by combining all the three methods.
+
+#### 4.4.1. Combine Models
+
+```{r,cache=TRUE, results='hide',warning=FALSE,message=FALSE}
+Mycomb_pred<-data.frame(pred_rf, pred_gbm, pred_lda, classe = Mytesting$classe)
+mod_comb<-train(classe ~ . , method = "gbm", data = Mycomb_pred)
+pred_comb<-predict(mod_comb, newdata = Mytesting)
+con_comb<-confusionMatrix(pred_comb, Mytesting$classe)
+```
+
+#### 4.4.2. Evaluate the Method
+
+```{r}
+con_comb
+plot(mod_comb, main = "Combined Model")
+plot(con_comb$table,col = "white", main = paste("Combined Confusion Matrix: Accuracy =", round(con_comb$overall['Accuracy'], 4)))
+```
+
+As we can see, we do have enhanced accuracy as 99.90%. So the combined model is the best model.
+
+## 5. Apply the Model to Testing Data Set.
+
+### 5.1. Predict the Testing Data Set Classes
+
+```{r}
+tpred_rf<-predict(mod_rf, newdata = testing)
+tpred_gbm<-predict(mod_gbm, newdata = testing)
+tpred_lda<-predict(mod_lda, newdata = testing)
+Mycomb_tpred<-data.frame(pred_rf=tpred_rf, pred_gbm=tpred_gbm, pred_lda=tpred_lda)
+tpred_comb<-predict(mod_comb, newdata = Mycomb_tpred)
+tpred_comb
+```
+
+### 5.2. Write Down File
+
+```{r}
+problem_id=1:length(tpred_comb)
+prediction_final<-data.frame(problem_id,classe=tpred_comb)
+write.table(prediction_final, file = "prediction.csv", sep = ",", row.names = FALSE)
+```
