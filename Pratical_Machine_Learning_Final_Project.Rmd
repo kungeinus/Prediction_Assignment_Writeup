@@ -1,8 +1,8 @@
 ---
-title: Pratical Machine Learning Final Project - Prediction Assignment Writeup
+title: "Pratical Machine Learning Final Project - Prediction Assignment Writeup"
 author: "Zhenkun Guo"
 date: "April 24, 2016"
-output: html_document
+output: pdf_document
 ---
 ## 1. Project Introduction
 
